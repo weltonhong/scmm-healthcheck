@@ -1,0 +1,22 @@
+# Line endings are LF in this repo and must stay LF.
+#
+# WHY THIS EXISTS. Both this repo and the canonical my-powerhouse store LF in
+# git. The trap is a Windows clone with core.autocrlf=true: it checks files out
+# as CRLF and converts them back on commit. If that conversion ever lands, every
+# line of every file shows as changed. A review of that diff is worthless, and
+# so is the rollback diff you would need if the deploy came up wrong.
+#
+# Measured 2026-08-20, before the first sync in four months: all blobs LF on
+# both sides, and the sync diff was identical with and without
+# --ignore-cr-at-eol (732 changed lines either way). That is the proof no
+# line-ending noise reached the commit. This file is what keeps it true for
+# whoever syncs next, from whatever machine.
+#
+# Committed on its own, ahead of the code, so the guard is in force when the
+# code lands and a revert of the code does not take the guard with it.
+* text=auto eol=lf
+
+# Binary assets: never touched by line-ending conversion.
+*.jpg -text
+*.png -text
+*.pdf -text
