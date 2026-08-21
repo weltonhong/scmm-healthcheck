@@ -160,6 +160,32 @@ GENERIC_TITLE_WORDS = {
 }
 
 
+
+# Debug tracing is OFF unless HEALTHCHECK_DEBUG=1.
+#
+# These prints go to stdout, and the webapp streams stdout LIVE into a progress
+# box the prospect can read over the rep's shoulder while the scan runs. Raw
+# domains, page titles and KEEP lines are our plumbing, and they have been on
+# that screen since 2026-04-12. Off by default; still one env var away when
+# something needs diagnosing.
+DEBUG = os.environ.get("HEALTHCHECK_DEBUG") == "1"
+
+
+def _debug(msg):
+    """Print only when HEALTHCHECK_DEBUG=1."""
+    if DEBUG:
+        print(msg)
+
+
+def _join_human(items):
+    """['A','B','C'] -> 'A, B and C'. For a line a prospect reads."""
+    items = [str(i) for i in items if i]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
 def is_generic_title(title):
     if not title:
         return True
@@ -496,9 +522,9 @@ def check_seo_per_city(business, website, cities, state):
         # DEBUG: print raw scraper output so we can trace why SEO names
         # sometimes come through as page titles instead of business names.
         raw_results = match.get("results") or []
-        print(f"[DEBUG SEO {city}] raw results count: {len(raw_results)}")
+        _debug(f"[DEBUG SEO {city}] raw results count: {len(raw_results)}")
         for i, r in enumerate(raw_results[:6]):
-            print(
+            _debug(
                 f"[DEBUG SEO {city}] #{i+1}: "
                 f"domain={r.get('domain')!r} "
                 f"title={(r.get('title') or '')[:80]!r}"
@@ -514,7 +540,7 @@ def check_seo_per_city(business, website, cities, state):
             if is_real_agency_result(r):
                 name = display_name_from_result(r)
                 key = name.lower().strip() if name else ""
-                print(
+                _debug(
                     f"[DEBUG SEO {city}] KEEP domain={r.get('domain')!r} "
                     f"-> display_name={name!r}"
                 )
@@ -526,9 +552,9 @@ def check_seo_per_city(business, website, cities, state):
         sys.stdout.flush()
 
         raw_ads = match.get("ads") or []
-        print(f"[DEBUG ADS {city}] raw ads count: {len(raw_ads)}")
+        _debug(f"[DEBUG ADS {city}] raw ads count: {len(raw_ads)}")
         for i, a in enumerate(raw_ads[:8]):
-            print(
+            _debug(
                 f"[DEBUG ADS {city}] #{i+1}: "
                 f"name={a.get('name')!r} domain={a.get('domain')!r}"
             )
@@ -550,6 +576,10 @@ def check_seo_per_city(business, website, cities, state):
         for f in as_completed(futures):
             city, data = f.result()
             out[city] = data
+            # They finish out of order, which is fine and worth showing: it is
+            # the only sign the scan is alive now the debug noise is gone.
+            print(f"  {city} ... done")
+            sys.stdout.flush()
     return out
 
 
@@ -991,9 +1021,10 @@ def run_health_check(business, cities, state):
             results["review_gap"] = gap
 
     # Parallel: SEO (per city, also yields 3-Pack via local_pack), Website, Reviews
+    # Plain language on purpose: a prospect reads this over the rep's
+    # shoulder, and "SEO+3-Pack" means nothing to them.
     print(
-        f"Running parallel scans (SEO+3-Pack, Website, Reviews) "
-        f"across {len(cities)} cities: {', '.join(cities)}\n"
+        f"Checking {_join_human(cities)}. Map results, search results, ads, website and reviews.\n"
     )
     sys.stdout.flush()
 
