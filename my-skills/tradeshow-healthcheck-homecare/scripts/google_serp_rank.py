@@ -704,10 +704,8 @@ def _host(v):
     return (v or "").lower().replace("www.", "").strip()
 
 
-def organic_from_api(d, business_name, domain, phones=(), fetch=None, street=""):
-    """Mirror of parse_organic_rank_from_html, against JSON. On a shared franchise website the phone on the ranking
-    page decides whose it is: the phone or street of their own listing on that page, never the page's web address
-    (measured.franchise_rank, Welton 2026-11-04)."""
+def organic_from_api(d, business_name, domain):
+    """Mirror of parse_organic_rank_from_html, against JSON."""
     rank = None
     results = []
     for r in (d.get("organic_results") or []):
@@ -728,8 +726,6 @@ def organic_from_api(d, business_name, domain, phones=(), fetch=None, street="")
         matched = (not hidden) and measured.page_verdict(host or url, domain) == measured.THEM
         if matched and rank is None:
             rank = pos
-    if measured.company_wide(domain):
-        rank = measured.franchise_rank(results, domain, phones, fetch=fetch, street=street)
     return rank, results
 
 
@@ -829,7 +825,7 @@ def ads_from_api(d):
     return out
 
 
-def run_google_api(business, domain, city, queries, api_key, own_cids=(), latlng=None, phones=(), street=""):
+def run_google_api(business, domain, city, queries, api_key, own_cids=(), latlng=None):
     out = {
         "business": business,
         "domain": domain,
@@ -841,7 +837,7 @@ def run_google_api(business, domain, city, queries, api_key, own_cids=(), latlng
     for q in queries:
         try:
             d = fetch_serp_google_api(q, city, api_key, latlng=latlng)
-            rank, results = organic_from_api(d, business, domain, phones, street=street)
+            rank, results = organic_from_api(d, business, domain)
             out["queries"].append({
                 "query": q,
                 "rank": rank,
@@ -1115,21 +1111,21 @@ def run_playwright(business, domain, city, queries):
 # ----------------------------- entrypoint -----------------------------
 
 
-def run(business, domain, city, queries, own_cids=(), latlng=None, phones=(), street=""):
+def run(business, domain, city, queries, own_cids=(), latlng=None):
     api_key = get_scrapingbee_key()
     if latlng:
         # From a given point only the coordinate search can be asked; the fallbacks search by town name, which would
         # be a different point printed as this one. No key or a failure here is couldn't check, never a town answer.
         if not api_key:
             raise RuntimeError("no search key: cannot search from a given point")
-        return run_google_api(business, domain, city, queries, api_key, own_cids, latlng, phones, street)
+        return run_google_api(business, domain, city, queries, api_key, own_cids, latlng)
     if api_key:
         # /api/v1/google is the DOCUMENTED endpoint and the one that works.
         # custom_google (run_scrapingbee) broke 2026-08-17 and is no longer in
         # ScrapingBee's docs. It stays as a fallback only until support
         # confirms its status, then it should be deleted.
         try:
-            return run_google_api(business, domain, city, queries, api_key, own_cids, phones=phones, street=street)
+            return run_google_api(business, domain, city, queries, api_key, own_cids)
         except Exception as e:
             print("Google API path failed: %s" % e, file=sys.stderr)
         try:
@@ -1148,10 +1144,6 @@ def main():
                         help="Pipe-separated list of queries")
     parser.add_argument("--latlng", default="",
                         help="Search from this point ('lat,lng', the prospect's own address) instead of the town's centre")
-    parser.add_argument("--phones", default="",
-                        help="Comma-separated phone(s) on the prospect's own Google listing (a shared franchise site)")
-    parser.add_argument("--street", default="",
-                        help="The street address on the prospect's own Google listing (a shared franchise site)")
     parser.add_argument("--cids", default="",
                         help="Comma-separated place ids (cid) of the prospect's own Google listing")
     args = parser.parse_args()
@@ -1159,8 +1151,7 @@ def main():
     queries = [q.strip() for q in args.queries.split("|") if q.strip()]
     result = run(args.business, args.domain, args.city, queries,
                  [c for c in args.cids.split(",") if c.strip()],
-                 tuple(float(x) for x in args.latlng.split(",")) if args.latlng.strip() else None,
-                 [p for p in args.phones.split(",") if p.strip()], args.street)
+                 tuple(float(x) for x in args.latlng.split(",")) if args.latlng.strip() else None)
     print(json.dumps(result, indent=2))
 
 
